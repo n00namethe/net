@@ -7,105 +7,101 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <string.h>
 #include <errno.h>
 
-#define SERVER_SOCK_NUMBER 4000
-#define SIZE_OF_MSG 15
+#include "pull_serevers_type_1.h"
 
-#define handle_error(msg) \
-        do { perror(msg); exit(EXIT_FAILURE); } while (0)
-
-#define PRINT_DEBUG_INFO(...) printf(__VA_ARGS__); printf("\n")
-#define PRINT_ERR(...) printf("[errno = %d]\n", errno); printf(__VA_ARGS__); printf("\n")
-#define PRINT_INFO(...) printf(__VA_ARGS__); printf("\n")
-
-typedef struct _server_context_t
+int conntect_new_server(int new_port)
 {
-    int server_socket_description;
-    struct sockaddr_in server_addr;
-} server_context_t;
-server_context_t listen_server_ctx = {0};
-server_context_t communication_server_ctx = {0};
-
-void message_exchange()
-{
-    PRINT_DEBUG_INFO(__FUNCTION__);
+    PRINT_DEBUG_INFO("here I am\n");
+    struct sockaddr_in server;
+    int msg_server = 0;
+    socklen_t server_size = 0;
+    int recv_size = 0;
+    int send_size = 0;
     char msg[SIZE_OF_MSG] = "Hello";
-    if (send(communication_server_ctx.server_socket_description, msg, sizeof(msg), 0) == -1)
-    {
-        PRINT_ERR("send2communication_server not success\n");
-    }
-    PRINT_INFO("msg sent: %s\n", msg);
-    if (recv(communication_server_ctx.server_socket_description, msg, sizeof(msg), 0) == -1)
-    {
-        PRINT_ERR("recv from communication_server not success\n");
-    }
-    PRINT_INFO("msg receive: %s\n", msg);
-    close(communication_server_ctx.server_socket_description);
-}
 
-void connect2communication_server()
-{
-    PRINT_DEBUG_INFO(__FUNCTION__);
-    communication_server_ctx.server_socket_description = socket(AF_INET, SOCK_DGRAM, 0);
-    if (communication_server_ctx.server_socket_description == -1)
+    msg_server = socket(AF_INET, SOCK_DGRAM, 0);
+    if(msg_server == -1) 
     {
-        PRINT_ERR("communication_server_ctx.server_socket_description");
-        exit(EXIT_FAILURE);
+        PRINT_ERR("Socket msg_server not success\n");
+        return -1;
     }
-    if (connect(communication_server_ctx.server_socket_description, (struct sockaddr *)&communication_server_ctx.server_addr, \
-                sizeof(communication_server_ctx.server_addr)) == -1)
-    {
-        PRINT_ERR("connect2communication_server not success\n");
-        close(communication_server_ctx.server_socket_description);
-    }
-}
+    PRINT_DEBUG_INFO("new_port = %d\n", new_port);
+    server.sin_family = AF_INET;
+    server.sin_port = htons(new_port);
+    server.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    server_size = sizeof(server);
 
-void receive_communication_server_addr()
-{
-    PRINT_DEBUG_INFO(__FUNCTION__);
-    pid_t my_pid = getpid();
-    socklen_t server_addr_size = sizeof(listen_server_ctx.server_addr);
-    if (sendto(listen_server_ctx.server_socket_description, &my_pid, sizeof(my_pid), 0, \
-               (struct sockaddr *)&listen_server_ctx.server_addr, server_addr_size) == -1)
+    send_size = sendto(msg_server, msg, sizeof(msg), 0, \
+                       (struct sockaddr *)&server, server_size);
+    if (send_size == -1)
     {
-        PRINT_ERR("send2listen_socket not success\n");
-        close(listen_server_ctx.server_socket_description);
+        PRINT_ERR("sent msg2msg_server not success\n");
+        close(msg_server);
+        return -1;
     }
-    if (recvfrom(listen_server_ctx.server_socket_description, &communication_server_ctx.server_addr, sizeof(communication_server_ctx.server_addr), 0, \
-                     (struct sockaddr *)&listen_server_ctx.server_addr, &server_addr_size) == -1)
-    {
-        PRINT_ERR("recv from clisten_server not success\n");
-        close(listen_server_ctx.server_socket_description);
-    }
-    close(listen_server_ctx.server_socket_description);
-}
+    PRINT_DEBUG_INFO("i sent msg = %s; sizeof(sent_msg) = %d\n", msg, send_size);
 
-void init_server_listen_socket_struct()
-{
-    PRINT_DEBUG_INFO(__FUNCTION__);
-    listen_server_ctx.server_addr.sin_family = AF_INET;
-    listen_server_ctx.server_addr.sin_port = htons(SERVER_SOCK_NUMBER);
-    listen_server_ctx.server_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-}
-
-void init_listen_server()
-{
-    PRINT_DEBUG_INFO(__FUNCTION__);
-    listen_server_ctx.server_socket_description = socket(AF_INET, SOCK_DGRAM, 0);
-    if (listen_server_ctx.server_socket_description == -1)
+    recv_size = recvfrom(msg_server, msg, sizeof(msg), 0, \
+                         (struct sockaddr *)&server, &server_size);
+    if (recv_size == -1)
     {
-        PRINT_ERR("listen_server_ctx.server_socket_description");
-        exit(EXIT_FAILURE);
+        PRINT_ERR("recv msg not success\n");
+        close(msg_server);
+        return -1;
     }
-    init_server_listen_socket_struct();
+    PRINT_DEBUG_INFO("I recv msg = %s; sizeof(recv_msg) = %d\n", msg, recv_size);
+    return 0;
 }
 
 int main()
 {
-    init_listen_server();
-    receive_communication_server_addr();
-    connect2communication_server();
-    message_exchange();
+    struct sockaddr_in server;
+    int listen_server = 0;
+    socklen_t server_size = 0;
+    int recv_size = 0;
+    int send_size = 0;
+    pid_t user_pid;
+    int new_port = 0;
+
+    listen_server = socket(AF_INET, SOCK_DGRAM, 0);
+    if(listen_server == -1) 
+    {
+        PRINT_ERR("Socket listen_server not success\n");
+        return -1;
+    }
+    PRINT_DEBUG_INFO("FD listen_server = %d\n", listen_server);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+    server.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    server_size = sizeof(server);
+
+    user_pid = getpid();
+    send_size = sendto(listen_server, &user_pid, sizeof(user_pid), 0, \
+                       (struct sockaddr *)&server, server_size);
+    if (send_size == -1)
+    {
+        PRINT_ERR("sent pid2server not success\n");
+        close(listen_server);
+        return -1;
+    }
+    PRINT_DEBUG_INFO("i sent user_pid = %d; sizeof(sent_msg) = %d\n", user_pid, send_size);
+
+    recv_size = recvfrom(listen_server, &new_port, sizeof(new_port), 0, \
+                         (struct sockaddr *)&server, &server_size);
+    if (recv_size == -1)
+    {
+        PRINT_ERR("recv new_port not success\n");
+        close(listen_server);
+        return -1;
+    }
+    PRINT_DEBUG_INFO("I recv msg with new_port = %d; sizeof(recv_msg) = %d\n", new_port, recv_size);
+
+    conntect_new_server(new_port);
+
+    close(listen_server);
     return 0;
 }

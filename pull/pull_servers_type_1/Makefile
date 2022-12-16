@@ -1,21 +1,22 @@
 BIN = binar
 OBJ = object
-
+SERVER = pull_inet_dgram_server
+CLIENT = pull_inet_dgram_client
 .PHONY: all clean
 
-all: pull_inet_dgram_server pull_inet_dgram_client
+all: $(SERVER) $(CLIENT)
 
 clean:
 	rm -f $(OBJ)/*.o $(BIN)/*
 
-pull_inet_dgram_server.o: pull_inet_dgram_server.c
-	gcc -c -o $(OBJ)/pull_inet_dgram_server.o pull_inet_dgram_server.c -pthread -g
+$(SERVER).o: $(SERVER).c
+	gcc -Wall -c -o $(OBJ)/$(SERVER).o $(SERVER).c -pthread -g
 
-pull_inet_dgram_server: pull_inet_dgram_server.o 
-	gcc -o $(BIN)/pull_inet_dgram_server $(OBJ)/pull_inet_dgram_server.o -pthread -g
+$(SERVER): $(SERVER).o 
+	gcc -Wall -o $(BIN)/$(SERVER) $(OBJ)/$(SERVER).o -pthread -g
 
-pull_inet_dgram_client.o: pull_inet_dgram_client.c 
-	gcc -c -o $(OBJ)/pull_inet_dgram_client.o pull_inet_dgram_client.c -pthread -g
+$(CLIENT).o: $(CLIENT).c 
+	gcc -Wall -c -o $(OBJ)/$(CLIENT).o $(CLIENT).c -g
 
-pull_inet_dgram_client: pull_inet_dgram_client.o 
-	gcc -o $(BIN)/pull_inet_dgram_client $(OBJ)/pull_inet_dgram_client.o -pthread -g
+$(CLIENT): $(CLIENT).o 
+	gcc -Wall -o $(BIN)/$(CLIENT) $(OBJ)/$(CLIENT).o -g

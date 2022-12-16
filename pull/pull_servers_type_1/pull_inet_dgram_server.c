@@ -11,224 +11,142 @@
 #include <string.h>
 #include <errno.h>
 
-#define SERVER_SOCK_NUMBER 4000
-#define SIZE_OF_MSG 15
-#define NUBMER_OF_CLIENTS 20
+#include "pull_serevers_type_1.h"
 
-#define handle_error(msg) \
-        do { perror(msg); exit(EXIT_FAILTURE); } while (0)
+#define NUMBER_OF_CLIENT 3
+#define RANDPORT 7000+rand()%2001;
 
-#define PRINT_DEBUG_INFO(...) printf(__VA_ARGS__); printf("\n")
-#define PRINT_ERR(...) printf("[errno = %d]\n", errno); printf(__VA_ARGS__); printf("\n")
-#define PRINT_INFO(...) printf(__VA_ARGS__); printf("\n")
+int count = 0;
 
-int user_port = 4001;
 
-typedef struct _c2s
+void* create_new_socket(void* arg)
 {
-	struct sockaddr_in peer_addr;
-	socklen_t peer_addr_size;
-	pid_t user_pid;
-} c2s;
+    PRINT_DEBUG_INFO("here I am\n");
+    struct sockaddr_in new_server, client;
+    int client_socket;
+    int client_port = *(int*)arg;
+    int recv_size = 0;
+    int send_size = 0;
+    socklen_t client_size;
+    socklen_t new_server_size;
+    char msg[SIZE_OF_MSG];
 
-typedef struct _client_t
-{
-	int user_socket_description;
-	int user_port;
-	struct sockaddr_in users_sockaddr;
-	socklen_t user_sockaddr_size;
-	pid_t user_pid;
-	pthread_t user_socket_pth;
-} client_t;
-client_t users_db[NUBMER_OF_CLIENTS] = {0};
-
-typedef struct _server_context_t
-{
-	int listen_socket_description;
-	struct sockaddr_in listen_addr;
-} server_context_t;
-server_context_t server_ctx = {0};
-
-void close_user_socket(int user_number)
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	close(users_db[user_number].user_socket_description);
-	PRINT_DEBUG_INFO("Я закрыл сокет users_db[%d]\n", user_number);
-	if (pthread_join(users_db[user_number].user_socket_pth, NULL) != 0)
+    PRINT_DEBUG_INFO("client_port = %d\n", client_port);
+    client_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (client_socket == -1)
     {
-        PRINT_ERR("Failed to join thread[%d]\n", user_number);
+        PRINT_ERR("Socket listen_server not success\n");
+        exit(EXIT_FAILURE);
     }
-    PRINT_DEBUG_INFO("pthread_join[%d] success\n", user_number);
-    memset(&users_db[user_number], 0, sizeof(users_db[user_number]));
-}
+    PRINT_DEBUG_INFO("I create client_socket, FD = %d\n", client_socket);
 
-void close_socket()
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	close(server_ctx.listen_socket_description);
-}
-
-void close_all()
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	for (int i = 0; i < NUBMER_OF_CLIENTS; i++)
-	{
-		close(users_db[i].user_socket_description);
-		PRINT_DEBUG_INFO("Я закрыл сокет users_db[%d]\n", i);
-		if (pthread_join(users_db[i].user_socket_pth, NULL) != 0)
-	    {
-	        PRINT_ERR("Failed to join thread[%d]\n", i);
-	    }
-	    PRINT_DEBUG_INFO("pthread_join[%d] success\n", i);
-	    memset(&users_db[i], 0, sizeof(users_db[i]));
-	}
-	close_socket();
-	exit(EXIT_FAILURE);
-}
-
-void message_exchange(int user_number)
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	char msg[SIZE_OF_MSG];
-	users_db[user_number].user_sockaddr_size = sizeof(users_db[user_number].users_sockaddr);
-	if (recvfrom(users_db[user_number].user_socket_description, msg, sizeof(msg), 0, \
-		             (struct sockaddr *)&users_db[user_number].users_sockaddr, &users_db[user_number].user_sockaddr_size) == -1)
-	{
-		PRINT_ERR("users_db[%d].user_socket_description not success\n", user_number);
-		close_all();
-	}
-	PRINT_INFO("msg receive: %s\n", msg);
-	strcat(msg, " World!");
-	if (sendto(users_db[user_number].user_socket_description, msg, sizeof(msg), 0, \
-			   (struct sockaddr *)&users_db[user_number].users_sockaddr, users_db[user_number].user_sockaddr_size) == -1)
-	{
-		PRINT_ERR("send users_db[%d].user_socket_description not success\n", user_number);
-		close_all();
-	}
-	PRINT_INFO("msg send: %s\n", msg);
-	close_user_socket(user_number);
-}
-
-void init_user_socket(int user_number)
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	users_db[user_number].users_sockaddr.sin_family = AF_INET;
-	users_db[user_number].user_port = user_port;
-	users_db[user_number].users_sockaddr.sin_port = htons(users_db[user_number].user_port);
-	users_db[user_number].users_sockaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	user_port++;
-}
-
-void create_socket_for_client(int user_number)
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	users_db[user_number].user_socket_description = socket(AF_INET, SOCK_DGRAM, 0);
-	if (users_db[user_number].user_socket_description == -1)
-	{
-		PRINT_ERR("users_db[%d].user_socket_description not success\n", user_number);
-		close_all();
-	}
-	PRINT_DEBUG_INFO("Socket for client[%d] create. description = %d\n", user_number, users_db[user_number].user_socket_description);
-	init_user_socket(user_number);
-	if (bind(users_db[user_number].user_socket_description, (struct sockaddr *)&users_db[user_number].users_sockaddr, \
-			 sizeof(users_db[user_number].users_sockaddr)) == -1)
-	{
-		PRINT_ERR("users_db[%d].user_socket_description not success\n", user_number);
-		close_all();
-	}
-
-}
-
-void start_new_message_exchange(int user_number)
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	if (pthread_create(&users_db[user_number].user_socket_pth, NULL, (void *)&message_exchange, &user_number) != 0)
+    new_server.sin_family = AF_INET;
+    new_server.sin_port = htons(client_port);
+    new_server.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    client_size = sizeof(client);
+    new_server_size = sizeof(new_server);
+    if (bind(client_socket, (struct sockaddr*)&new_server, new_server_size) == -1)
     {
-        PRINT_ERR("Failed to create thread[%d]\n", user_number);
-        close_all();
+        PRINT_ERR("Bind new_server not success\n");
+        close(client_socket);
+        exit(EXIT_FAILURE);
     }
-}
 
-int legit_check_new_client(c2s *new_user)
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	for (int i = 0; i < NUBMER_OF_CLIENTS; i++)
+    PRINT_DEBUG_INFO("I wait msg from client\n");
+    recv_size = recvfrom(client_socket, msg, sizeof(msg), 0, \
+                         (struct sockaddr *)&client, &client_size);
+    if (recv_size == -1)
     {
-        if (i == NUBMER_OF_CLIENTS - 1)
-        {
-            PRINT_INFO("Свободных мест нет, количество пользователей = %d\n", NUBMER_OF_CLIENTS);
-            break;
-        }
-        else if (users_db[i].user_pid == 0)
-        {
-        	users_db[i].user_sockaddr_size = new_user->peer_addr_size;
-        	users_db[i].user_pid = new_user->user_pid;
-        	users_db[i].users_sockaddr = new_user->peer_addr;
-        	PRINT_DEBUG_INFO("users_db[%d].user_sockaddr_size: %d\nusers_db[%d].user_pid: %d\n", \
-        					  i, users_db[i].user_sockaddr_size, i, users_db[i].user_pid);
-        	return i;
-        }
+        PRINT_ERR("recvfrom client not success\n");
+        close(client_socket);
+        exit(EXIT_FAILURE);
     }
-    return 0;
-}
+    PRINT_DEBUG_INFO("recv_size from client = %d\n", recv_size);
 
-int connection_new_user()
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	c2s new_user;
-	int user_number;
-	socklen_t peer_addr_size = sizeof(new_user.peer_addr);
-	if (recvfrom(server_ctx.listen_socket_description, &new_user.user_pid, sizeof(new_user.user_pid), 0, \
-	             (struct sockaddr *)&new_user.peer_addr, &peer_addr_size) == -1)
-	{
-		PRINT_ERR("recvfrom server_ctx.listen_socket_description not success\n");
-		close_all();
-	}
-	PRINT_DEBUG_INFO("pid new_user = %d", new_user.user_pid);
-	user_number = legit_check_new_client(&new_user);
-	create_socket_for_client(user_number);
-	if (sendto(server_ctx.listen_socket_description, &users_db[user_number].users_sockaddr, sizeof(users_db[user_number].users_sockaddr), 0, \
-		   (struct sockaddr *)&new_user.peer_addr, peer_addr_size) == -1)
-	{
-		PRINT_ERR("send server_ctx.listen_socket_description not success\n");
-		close_all();
-	}
-	PRINT_DEBUG_INFO("Я отправил сообщение с данными для подключения\n");
-	memset(&new_user, 0, sizeof(new_user));
-	return user_number;
-}
+    PRINT_INFO("Recv msg: %s, sizeof msg: %d\n", msg, recv_size);
+    sprintf(msg, " World! PORT:%d", client_port);
 
-void init_server_struct()
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	server_ctx.listen_addr.sin_family = AF_INET;
-	server_ctx.listen_addr.sin_port = htons(SERVER_SOCK_NUMBER);
-	server_ctx.listen_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-}
-
-void init_listen_socket()
-{
-	PRINT_DEBUG_INFO(__FUNCTION__);
-	server_ctx.listen_socket_description = socket(AF_INET, SOCK_DGRAM, 0);
-	if (server_ctx.listen_socket_description == -1)
-	{
-		PRINT_ERR("server_ctx.listen_socket_description not success\n");
-		close_all();
-	}
-	init_server_struct();
-	if (bind(server_ctx.listen_socket_description, (struct sockaddr *)&server_ctx.listen_addr, \
-			 sizeof(server_ctx.listen_addr)) == -1)
-	{
-		PRINT_ERR("bind server_ctx.listen_socket_description not success\n");
-		close_all();
-	}
+    send_size = sendto(client_socket, &msg, sizeof(msg), 0, \
+                               (struct sockaddr *)&client, client_size);
+    if (send_size == -1)
+    {
+        PRINT_ERR("send2client not success\n");
+        close(client_socket);
+        exit(EXIT_FAILURE);
+    }
+    PRINT_DEBUG_INFO("sent_size2client = %d\n", send_size);
+    memset(msg, 0, SIZE_OF_MSG);
+    close(client_socket);
+    count--;
+    return NULL;
 }
 
 int main()
 {
-	init_listen_socket();
-	int user_number = connection_new_user();
-	start_new_message_exchange(user_number);
-	close_socket();
-	return 0;
+    struct sockaddr_in server, client;
+    int listen_server = 0;
+    socklen_t client_size = 0;
+    socklen_t server_size = 0;
+    int client_port = 0;
+    pid_t user_pid;
+    pthread_t client_socket_pth[NUMBER_OF_CLIENT];
+
+    client_size = sizeof(client);
+    server_size = sizeof(server);
+
+    listen_server = socket(AF_INET, SOCK_DGRAM, 0);
+    if (listen_server == -1)
+    {
+        PRINT_ERR("Socket listen_server not success\n");
+        exit(EXIT_FAILURE);
+    }
+    PRINT_DEBUG_INFO("I create listen_server, FD = %d\n", listen_server);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+    server.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    if (bind(listen_server, (struct sockaddr*)&server, server_size) == -1)
+    {
+        PRINT_ERR("Bint listen_server not success\n");
+        close(listen_server);
+    }
+
+    while (1) 
+    {
+        client_port = RANDPORT;
+        PRINT_DEBUG_INFO("я зашел в цикл, жду сообщения\n");
+        int recv_size = recvfrom(listen_server, &user_pid, sizeof(user_pid), 0, \
+                                 (struct sockaddr *)&client, &client_size);
+        if (recv_size == -1)
+        {
+            PRINT_ERR("recvfrom slisten_server not success\n");
+            close(listen_server);
+        }
+        count++;
+        PRINT_DEBUG_INFO("recv_size from client = %d\n", recv_size);
+        PRINT_INFO("I receive new user_pid = %d\n", user_pid);
+        if (count > NUMBER_OF_CLIENT) {
+            PRINT_ERR("Max NUMBER_OF_CLIENT has been reached\n");
+            break;
+        }
+        int send_size = sendto(listen_server, &client_port, sizeof(client_port), 0, \
+                               (struct sockaddr *)&client, client_size);
+        if (send_size == -1)
+        {
+            PRINT_ERR("send listen_server not success\n");
+            close(listen_server);
+        }
+        PRINT_DEBUG_INFO("sent_size2client = %d\n", send_size);
+        PRINT_INFO("I sent new connect port = %d\n", client_port);
+        pthread_create(&client_socket_pth[count], NULL, create_new_socket, &client_port);
+    }
+
+    for (int i = 0; i < NUMBER_OF_CLIENT; i++)
+    {
+        pthread_join(client_socket_pth[i], NULL);
+    }
+
+    close(listen_server);
+    return 0;
 }
